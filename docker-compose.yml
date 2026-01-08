@@ -1,0 +1,85 @@
+############### Version of Docker Compose file format ################
+# indicates the version of the Docker Compose file format being used
+version: '3'
+######################################################################
+
+############### YAML anchor ################
+
+# build: Specifies the build context and Dockerfile for building the custom Airflow image.
+# image: Specifies the custom Airflow image to use.
+# env_file: Specifies the environment file to use for Airflow.
+# volumes: Mounts directories from the host machine to directories within the Airflow container.
+# depends_on: Specifies that the Airflow services depend on the PostgreSQL and Redis services.
+
+x-airflow-common:
+  &airflow-common
+  build:
+    context: .
+    dockerfile: Dockerfile
+  image: custom-airflow:2.7.1-python3.11
+  env_file:
+    - airflow.env
+  volumes:
+    - ./config:/opt/airflow/config
+    - ./dags:/opt/airflow/dags
+    - ./data:/opt/airflow/data
+    - ./etls:/opt/airflow/etls
+    - ./logs:/opt/airflow/logs
+    - ./pipelines:/opt/airflow/pipelines
+    - ./plugins:/opt/airflow/plugins
+    - ./tests:/opt/airflow/tests
+    - ./utils:/opt/airflow/utils
+   # - ./airflow.cfg:/opt/airflow/airflow.cfg
+    - ./requirements.txt:/opt/airflow/requirements.txt
+  depends_on:
+    - postgres
+    - redis
+######################################################################
+
+############### Services ################
+# This section defines various services using Docker images. Each service represents a container. Services include:
+
+# postgres: PostgreSQL database container with environment variables for user, password, database name, and port mapping.
+# redis: Redis database container with port mapping.
+# airflow-init: Initializes Airflow by installing dependencies, initializing the database, and starting Airflow.
+# airflow-webserver: Airflow webserver container with port mapping.
+# airflow-scheduler: Airflow scheduler container.
+# airflow-worker: Airflow worker container.
+
+services:
+  postgres:
+    image: postgres:12
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: airflow_reddit
+      POSTGRES_PORT: 5432
+    ports:
+      - "5432:5432"
+
+  redis:
+    image: redis:latest
+    ports:
+      - "6379:6379"
+
+  airflow-init:
+    <<: *airflow-common
+    command: >
+      bash -c "pip install -r /opt/airflow/requirements.txt && airflow db init && airflow db upgrade && airflow users create --username admin --firstname admin --lastname admin --role Admin --email airflow@airflow.com --password admin"
+    restart: "no"
+
+  airflow-webserver:
+    <<: *airflow-common
+    command: webserver
+    ports:
+      - "8080:8080"
+
+  airflow-scheduler:
+    <<: *airflow-common
+    command: scheduler
+
+  airflow-worker:
+    <<: *airflow-common
+    command: celery worker
+
+######################################################################
