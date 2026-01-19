@@ -1,18 +1,41 @@
-# Pull the official Apache Airflow image, version 2.7.1 with Python 3.11
-FROM apache/airflow:2.7.1-python3.11
+# Production-ready Dockerfile for Apache Airflow
+FROM apache/airflow:2.7.2-python3.11
 
-
-# Copy the requirements.txt file from the local directory to the /opt/airflow/ directory in the container
-COPY requirements.txt /opt/airflow/
-
-# Switch to the root user to install additional system packages
+# Switch to root user for system package installation
 USER root
 
-# Update the package lists and install gcc (GNU Compiler Collection) and python3-dev (Python development headers)
-RUN apt-get update && apt-get install -y gcc python3-dev
+# Install system dependencies
+RUN apt-get update && \
+    apt-get install -y \
+    gcc \
+    g++ \
+    python3-dev \
+    postgresql-client \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
 
-# Switch back to the airflow user for running subsequent commands in a less privileged mode
+# Switch back to airflow user
 USER airflow
 
-# Install the Python packages listed in the requirements.txt file using pip
-RUN pip install --no-cache-dir -r /opt/airflow/requirements.txt
+# Set working directory
+WORKDIR /opt/airflow
+
+# Copy requirements file
+COPY requirements.txt /opt/airflow/requirements.txt
+
+# Install Python dependencies
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r /opt/airflow/requirements.txt
+
+# Copy source code
+COPY src/ /opt/airflow/src/
+COPY dags/ /opt/airflow/dags/
+COPY config/ /opt/airflow/config/
+COPY notebooks/ /opt/airflow/notebooks/
+
+# Set Python path
+ENV PYTHONPATH=/opt/airflow:$PYTHONPATH
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD airflow version || exit 1
